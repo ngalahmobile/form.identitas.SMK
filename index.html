@@ -1,49 +1,12 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FORM DATA IDENTITAS</title>
-<style>
-  body { font-family: Arial, sans-serif; margin: 20px; }
-  h2 { margin-bottom: 10px; }
-  button { margin: 10px 5px; padding: 8px 12px; }
-  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-  th, td { border: 1px solid #ccc; padding: 5px; text-align: left; }
-  select, input { width: 100%; box-sizing: border-box; }
-</style>
-</head>
-<body>
-<h2>FORM DATA IDENTITAS</h2>
-
-<button onclick="addRow()">➕ Tambah Baris</button>
-<button onclick="downloadCSV()">💾 Unduh CSV</button>
-
-<table id="dataTable">
-  <thead>
-    <tr>
-      <th>NAMA</th>
-      <th>JENIS KELAMIN</th>
-      <th>TEMPAT LAHIR</th>
-      <th>TANGGAL LAHIR</th>
-      <th>PEKERJAAN</th>
-      <th>ALAMAT LENGKAP</th>
-      <th>PROVINSI</th>
-      <th>KAB/KOTA</th>
-      <th>KECAMATAN</th>
-      <th>DESA</th>
-      <th>KODE POS</th>
-    </tr>
-  </thead>
-  <tbody id="tbody"></tbody>
-</table>
-
 <script>
 let dataWilayah = {};
+
+// ✅ Load Data Wilayah
 fetch('data-wilayah.json')
   .then(res => res.json())
   .then(json => { dataWilayah = json; addRow(); });
 
+// ✅ Tambah baris kosong
 function addRow() {
   const tbody = document.getElementById("tbody");
   const row = tbody.insertRow();
@@ -64,6 +27,7 @@ function addRow() {
   Object.keys(dataWilayah).sort().forEach(p => provSel.add(new Option(p, p)));
 }
 
+// ✅ Isi dropdown bertingkat
 function fillKab(sel) {
   const row = sel.closest("tr");
   const prov = sel.value;
@@ -118,6 +82,7 @@ function clearBelow(row, startIndex) {
   }
 }
 
+// ✅ Unduh CSV
 function downloadCSV() {
   const rows = [["NAMA","JENIS KELAMIN","TEMPAT LAHIR","TANGGAL LAHIR","PEKERJAAN","ALAMAT LENGKAP","PROVINSI","KAB/KOTA","KECAMATAN","DESA","KODE POS"]];
   const tbody = document.getElementById("tbody");
@@ -137,6 +102,71 @@ function downloadCSV() {
   link.download = "data-identitas.csv";
   link.click();
 }
+
+// ✅ Mode Tempel Data
+function togglePasteArea() {
+  const area = document.getElementById('pasteArea');
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+}
+
+// ✅ Proses tempelan dari Excel / Sheet
+async function importPastedData() {
+  const text = document.getElementById('pasteInput').value.trim();
+  if (!text) return;
+  const rows = text.split(/\n/).map(r => r.split(/\t/));
+  const tbody = document.getElementById('tbody');
+  
+  for (const cols of rows) {
+    const row = tbody.insertRow();
+    row.innerHTML = `
+      <td><input type="text" value="${cols[0] || ''}"></td>
+      <td><select><option>${cols[1] || ''}</option></select></td>
+      <td><input type="text" value="${cols[2] || ''}"></td>
+      <td><input type="date" value="${cols[3] || ''}"></td>
+      <td><select><option>${cols[4] || ''}</option></select></td>
+      <td><input type="text" value="${cols[5] || ''}"></td>
+      <td><select><option>${cols[6] || ''}</option></select></td>
+      <td><select><option>${cols[7] || ''}</option></select></td>
+      <td><select><option>${cols[8] || ''}</option></select></td>
+      <td><select><option>${cols[9] || ''}</option></select></td>
+      <td><input type="text" value="${cols[10] || ''}"></td>
+    `;
+    
+    // Auto-pilih dropdown bertingkat
+    const provSel = row.cells[6].querySelector("select");
+    Object.keys(dataWilayah).sort().forEach(p => provSel.add(new Option(p, p)));
+    const prov = normalize(cols[6]);
+    if (prov && dataWilayah[prov]) {
+      provSel.value = prov;
+      const kabSel = row.cells[7].querySelector("select");
+      Object.keys(dataWilayah[prov]).forEach(k => kabSel.add(new Option(k, k)));
+      const kab = normalize(cols[7]);
+      if (kab && dataWilayah[prov][kab]) {
+        kabSel.value = kab;
+        const kecSel = row.cells[8].querySelector("select");
+        Object.keys(dataWilayah[prov][kab]).forEach(kec => kecSel.add(new Option(kec, kec)));
+        const kec = normalize(cols[8]);
+        if (kec && dataWilayah[prov][kab][kec]) {
+          kecSel.value = kec;
+          const desaSel = row.cells[9].querySelector("select");
+          dataWilayah[prov][kab][kec].forEach(d => desaSel.add(new Option(d.desa, d.desa)));
+          const desa = normalize(cols[9]);
+          if (desa) {
+            desaSel.value = desa;
+            const kode = dataWilayah[prov][kab][kec].find(d => d.desa === desa)?.kode || "";
+            row.cells[10].querySelector("input").value = kode;
+          }
+        }
+      }
+    }
+  }
+
+  document.getElementById('pasteInput').value = '';
+  document.getElementById('pasteArea').style.display = 'none';
+}
+
+// ✅ Normalisasi teks (hilangkan kapitalisasi & spasi ekstra)
+function normalize(str) {
+  return str ? str.trim().toUpperCase() : "";
+}
 </script>
-</body>
-</html>
