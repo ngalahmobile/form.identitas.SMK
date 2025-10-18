@@ -8,28 +8,38 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #ccc; padding: 6px; }
   th { background: #f0f0f0; }
-  input, select { width: 100%; box-sizing: border-box; }
-  button { margin-top: 12px; padding: 8px 14px; }
+  input, select, textarea { width: 100%; box-sizing: border-box; }
+  button { margin: 8px 6px; padding: 8px 14px; cursor: pointer; }
+  #pasteArea { display: none; width: 100%; height: 150px; margin-top: 10px; }
+  #status { margin-top: 12px; }
 </style>
 </head>
 <body>
 <h2>FORM IDENTITAS</h2>
+
+<div>
+  <button onclick="togglePaste()">🧩 Mode Paste</button>
+  <button onclick="submitForm()">📤 Simpan ke Spreadsheet</button>
+</div>
+
+<textarea id="pasteArea" placeholder="Tempel data tabel di sini (pakai TAB antar kolom, ENTER antar baris)..."></textarea>
+<p id="status"></p>
+
 <form id="formData">
   <table id="formTable">
     <thead><tr id="headerRow"></tr></thead>
     <tbody><tr id="inputRow"></tr></tbody>
   </table>
 </form>
-<button onclick="submitForm()">📤 Simpan ke Spreadsheet</button>
-<p id="status"></p>
 
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzHuSQ7FlnnIkvt2vyMW6-lm-chQny-vChzNcxsw2ZhzyOSOEjI87Zz1o_VBVzcv0Km/exec";
-const JSON_URL   = "https://github.com/ngalahmobile/form.identitas.SMK/data-wilayah.json";
+const JSON_URL   = "https://github.com/ngalahmobile/form.identitas.SMK/blob/main/data-wilayah.json";
 
 let wilayahData = [];
+let headers = [];
 
-// --- Load header + data wilayah
+// === Load header dan data wilayah ===
 async function initForm() {
   const [resForm, resWilayah] = await Promise.all([
     fetch(SCRIPT_URL),
@@ -37,11 +47,11 @@ async function initForm() {
   ]);
   const formData = await resForm.json();
   wilayahData = await resWilayah.json();
-
-  buildForm(formData.headers);
+  headers = formData.headers;
+  buildForm(headers);
 }
 
-// --- Buat form otomatis dari header
+// === Buat form otomatis dari header ===
 function buildForm(headers) {
   const headerRow = document.getElementById("headerRow");
   const inputRow  = document.getElementById("inputRow");
@@ -67,11 +77,11 @@ function buildForm(headers) {
     inputRow.appendChild(td);
   });
 
-  // Isi dropdown awal (Provinsi)
   const provs = [...new Set(wilayahData.map(w => w.PROVINSI))];
   populate("PROVINSI", provs);
 }
 
+// === Isi dropdown ===
 function populate(id, list) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -92,41 +102,70 @@ function updateDropdown(level) {
 
   if (level === "PROVINSI") {
     populate("KABUPATEN/KOTA", [...new Set(wilayahData.filter(w => w.PROVINSI === prov).map(w => w["KABUPATEN/KOTA"]))]);
-    populate("KECAMATAN", []);
-    populate("DESA/KELURAHAN", []);
-    populate("KODE POS", []);
-  }
-  else if (level === "KABUPATEN/KOTA") {
+    populate("KECAMATAN", []); populate("DESA/KELURAHAN", []); populate("KODE POS", []);
+  } else if (level === "KABUPATEN/KOTA") {
     populate("KECAMATAN", [...new Set(wilayahData.filter(w => w["KABUPATEN/KOTA"] === kab).map(w => w.KECAMATAN))]);
-    populate("DESA/KELURAHAN", []);
-    populate("KODE POS", []);
-  }
-  else if (level === "KECAMATAN") {
+    populate("DESA/KELURAHAN", []); populate("KODE POS", []);
+  } else if (level === "KECAMATAN") {
     populate("DESA/KELURAHAN", [...new Set(wilayahData.filter(w => w.KECAMATAN === kec).map(w => w["DESA/KELURAHAN"]))]);
     populate("KODE POS", []);
-  }
-  else if (level === "DESA/KELURAHAN") {
+  } else if (level === "DESA/KELURAHAN") {
     populate("KODE POS", [...new Set(wilayahData.filter(w => w["DESA/KELURAHAN"] === desa).map(w => w["KODE POS"]))]);
   }
 }
 
-// --- Kirim data ke Spreadsheet
+// === Kirim data dari form tunggal ===
 async function submitForm() {
   const inputs = document.querySelectorAll("#inputRow input, #inputRow select");
   const obj = {};
   inputs.forEach(el => obj[el.id] = el.value);
 
-  document.getElementById("status").textContent = "⏳ Mengirim...";
+  document.getElementById("status").textContent = "⏳ Mengirim data...";
   const res = await fetch(SCRIPT_URL, {
     method: "POST",
     body: JSON.stringify(obj),
     headers: { "Content-Type": "application/json" }
   });
-  document.getElementById("status").textContent = res.ok ? "✅ Data tersimpan!" : "❌ Gagal simpan";
+  document.getElementById("status").textContent = res.ok ? "✅ Data tersimpan!" : "❌ Gagal menyimpan";
+}
+
+// === Toggle mode paste ===
+function togglePaste() {
+  const area = document.getElementById("pasteArea");
+  area.style.display = area.style.display === "none" ? "block" : "none";
+  if (area.style.display === "block") {
+    area.focus();
+    area.onpaste = handlePaste;
+  }
+}
+
+// === Tangani data paste ===
+async function handlePaste(e) {
+  setTimeout(async () => {
+    const text = e.target.value.trim();
+    if (!text) return;
+    const rows = text.split(/\r?\n/).map(r => r.split(/\t/));
+
+    const payload = rows.map(r => {
+      const rowObj = {};
+      headers.forEach((h, i) => { rowObj[h] = r[i] || ""; });
+      return rowObj;
+    });
+
+    document.getElementById("status").textContent = "⏳ Mengirim " + payload.length + " baris...";
+    for (const row of payload) {
+      await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify(row),
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    document.getElementById("status").textContent = "✅ Semua data berhasil disimpan!";
+    e.target.value = "";
+  }, 50);
 }
 
 initForm();
 </script>
 </body>
 </html>
-
