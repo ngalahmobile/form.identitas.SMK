@@ -1,172 +1,131 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>FORM IDENTITAS</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 6px; }
+  th { background: #f0f0f0; }
+  input, select { width: 100%; box-sizing: border-box; }
+  button { margin-top: 12px; padding: 8px 14px; }
+</style>
+</head>
+<body>
+<h2>FORM IDENTITAS</h2>
+<form id="formData">
+  <table id="formTable">
+    <thead><tr id="headerRow"></tr></thead>
+    <tbody><tr id="inputRow"></tr></tbody>
+  </table>
+</form>
+<button onclick="submitForm()">📤 Simpan ke Spreadsheet</button>
+<p id="status"></p>
+
 <script>
-let dataWilayah = {};
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzHuSQ7FlnnIkvt2vyMW6-lm-chQny-vChzNcxsw2ZhzyOSOEjI87Zz1o_VBVzcv0Km/exec";
+const JSON_URL   = "https://ngalahmobile/form.identitas.SMK/data-wilayah.json";
 
-// ✅ Load Data Wilayah
-fetch('data-wilayah.json')
-  .then(res => res.json())
-  .then(json => { dataWilayah = json; addRow(); });
+let wilayahData = [];
 
-// ✅ Tambah baris kosong
-function addRow() {
-  const tbody = document.getElementById("tbody");
-  const row = tbody.insertRow();
-  row.innerHTML = `
-    <td><input type="text"></td>
-    <td><select><option value="">-</option><option>LAKI-LAKI</option><option>PEREMPUAN</option></select></td>
-    <td><input type="text"></td>
-    <td><input type="date"></td>
-    <td><select><option value="">-</option><option>PNS</option><option>KARYAWAN SWASTA</option><option>WIRAUSAHA</option><option>PELAJAR</option><option>LAINNYA</option></select></td>
-    <td><input type="text"></td>
-    <td><select onchange="fillKab(this)"><option value="">PILIH</option></select></td>
-    <td><select onchange="fillKec(this)"><option value="">PILIH</option></select></td>
-    <td><select onchange="fillDesa(this)"><option value="">PILIH</option></select></td>
-    <td><select onchange="fillKode(this)"><option value="">PILIH</option></select></td>
-    <td><input type="text" readonly></td>
-  `;
-  const provSel = row.cells[6].querySelector("select");
-  Object.keys(dataWilayah).sort().forEach(p => provSel.add(new Option(p, p)));
+// --- Load header + data wilayah
+async function initForm() {
+  const [resForm, resWilayah] = await Promise.all([
+    fetch(SCRIPT_URL),
+    fetch(JSON_URL)
+  ]);
+  const formData = await resForm.json();
+  wilayahData = await resWilayah.json();
+
+  buildForm(formData.headers);
 }
 
-// ✅ Isi dropdown bertingkat
-function fillKab(sel) {
-  const row = sel.closest("tr");
-  const prov = sel.value;
-  const kabSel = row.cells[7].querySelector("select");
-  kabSel.innerHTML = "<option value=''>PILIH</option>";
-  if (prov && dataWilayah[prov]) {
-    Object.keys(dataWilayah[prov]).sort().forEach(kab => kabSel.add(new Option(kab, kab)));
-  }
-  clearBelow(row, 8);
-}
+// --- Buat form otomatis dari header
+function buildForm(headers) {
+  const headerRow = document.getElementById("headerRow");
+  const inputRow  = document.getElementById("inputRow");
+  headerRow.innerHTML = "";
+  inputRow.innerHTML = "";
 
-function fillKec(sel) {
-  const row = sel.closest("tr");
-  const prov = row.cells[6].querySelector("select").value;
-  const kab = sel.value;
-  const kecSel = row.cells[8].querySelector("select");
-  kecSel.innerHTML = "<option value=''>PILIH</option>";
-  if (prov && kab && dataWilayah[prov][kab]) {
-    Object.keys(dataWilayah[prov][kab]).sort().forEach(kec => kecSel.add(new Option(kec, kec)));
-  }
-  clearBelow(row, 9);
-}
+  headers.forEach(h => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    headerRow.appendChild(th);
 
-function fillDesa(sel) {
-  const row = sel.closest("tr");
-  const prov = row.cells[6].querySelector("select").value;
-  const kab = row.cells[7].querySelector("select").value;
-  const kec = sel.value;
-  const desaSel = row.cells[9].querySelector("select");
-  desaSel.innerHTML = "<option value=''>PILIH</option>";
-  if (prov && kab && kec && dataWilayah[prov][kab][kec]) {
-    dataWilayah[prov][kab][kec].forEach(d => desaSel.add(new Option(d.desa, d.desa)));
-  }
-  clearBelow(row, 10);
-}
-
-function fillKode(sel) {
-  const row = sel.closest("tr");
-  const prov = row.cells[6].querySelector("select").value;
-  const kab = row.cells[7].querySelector("select").value;
-  const kec = row.cells[8].querySelector("select").value;
-  const desa = sel.value;
-  const kode = dataWilayah[prov][kab][kec].find(d => d.desa === desa)?.kode || "";
-  row.cells[10].querySelector("input").value = kode;
-}
-
-function clearBelow(row, startIndex) {
-  for (let i = startIndex; i <= 10; i++) {
-    const cell = row.cells[i];
-    if (cell.querySelector("select")) cell.querySelector("select").innerHTML = "<option value=''>PILIH</option>";
-    if (cell.querySelector("input")) cell.querySelector("input").value = "";
-  }
-}
-
-// ✅ Unduh CSV
-function downloadCSV() {
-  const rows = [["NAMA","JENIS KELAMIN","TEMPAT LAHIR","TANGGAL LAHIR","PEKERJAAN","ALAMAT LENGKAP","PROVINSI","KAB/KOTA","KECAMATAN","DESA","KODE POS"]];
-  const tbody = document.getElementById("tbody");
-  for (const row of tbody.rows) {
-    const values = [];
-    for (let i = 0; i < 11; i++) {
-      const input = row.cells[i].querySelector("input");
-      const select = row.cells[i].querySelector("select");
-      values.push(input ? input.value : (select ? select.value : ""));
+    const td = document.createElement("td");
+    if (["PROVINSI","KABUPATEN/KOTA","KECAMATAN","DESA/KELURAHAN","KODE POS"].includes(h)) {
+      const sel = document.createElement("select");
+      sel.id = h;
+      sel.onchange = () => updateDropdown(h);
+      td.appendChild(sel);
+    } else {
+      const inp = document.createElement("input");
+      inp.id = h;
+      td.appendChild(inp);
     }
-    rows.push(values);
+    inputRow.appendChild(td);
+  });
+
+  // Isi dropdown awal (Provinsi)
+  const provs = [...new Set(wilayahData.map(w => w.PROVINSI))];
+  populate("PROVINSI", provs);
+}
+
+function populate(id, list) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = "<option value=''>-- PILIH --</option>";
+  list.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    el.appendChild(opt);
+  });
+}
+
+function updateDropdown(level) {
+  const prov = document.getElementById("PROVINSI")?.value;
+  const kab  = document.getElementById("KABUPATEN/KOTA")?.value;
+  const kec  = document.getElementById("KECAMATAN")?.value;
+  const desa = document.getElementById("DESA/KELURAHAN")?.value;
+
+  if (level === "PROVINSI") {
+    populate("KABUPATEN/KOTA", [...new Set(wilayahData.filter(w => w.PROVINSI === prov).map(w => w["KABUPATEN/KOTA"]))]);
+    populate("KECAMATAN", []);
+    populate("DESA/KELURAHAN", []);
+    populate("KODE POS", []);
   }
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "data-identitas.csv";
-  link.click();
-}
-
-// ✅ Mode Tempel Data
-function togglePasteArea() {
-  const area = document.getElementById('pasteArea');
-  area.style.display = area.style.display === 'none' ? 'block' : 'none';
-}
-
-// ✅ Proses tempelan dari Excel / Sheet
-async function importPastedData() {
-  const text = document.getElementById('pasteInput').value.trim();
-  if (!text) return;
-  const rows = text.split(/\n/).map(r => r.split(/\t/));
-  const tbody = document.getElementById('tbody');
-  
-  for (const cols of rows) {
-    const row = tbody.insertRow();
-    row.innerHTML = `
-      <td><input type="text" value="${cols[0] || ''}"></td>
-      <td><select><option>${cols[1] || ''}</option></select></td>
-      <td><input type="text" value="${cols[2] || ''}"></td>
-      <td><input type="date" value="${cols[3] || ''}"></td>
-      <td><select><option>${cols[4] || ''}</option></select></td>
-      <td><input type="text" value="${cols[5] || ''}"></td>
-      <td><select><option>${cols[6] || ''}</option></select></td>
-      <td><select><option>${cols[7] || ''}</option></select></td>
-      <td><select><option>${cols[8] || ''}</option></select></td>
-      <td><select><option>${cols[9] || ''}</option></select></td>
-      <td><input type="text" value="${cols[10] || ''}"></td>
-    `;
-    
-    // Auto-pilih dropdown bertingkat
-    const provSel = row.cells[6].querySelector("select");
-    Object.keys(dataWilayah).sort().forEach(p => provSel.add(new Option(p, p)));
-    const prov = normalize(cols[6]);
-    if (prov && dataWilayah[prov]) {
-      provSel.value = prov;
-      const kabSel = row.cells[7].querySelector("select");
-      Object.keys(dataWilayah[prov]).forEach(k => kabSel.add(new Option(k, k)));
-      const kab = normalize(cols[7]);
-      if (kab && dataWilayah[prov][kab]) {
-        kabSel.value = kab;
-        const kecSel = row.cells[8].querySelector("select");
-        Object.keys(dataWilayah[prov][kab]).forEach(kec => kecSel.add(new Option(kec, kec)));
-        const kec = normalize(cols[8]);
-        if (kec && dataWilayah[prov][kab][kec]) {
-          kecSel.value = kec;
-          const desaSel = row.cells[9].querySelector("select");
-          dataWilayah[prov][kab][kec].forEach(d => desaSel.add(new Option(d.desa, d.desa)));
-          const desa = normalize(cols[9]);
-          if (desa) {
-            desaSel.value = desa;
-            const kode = dataWilayah[prov][kab][kec].find(d => d.desa === desa)?.kode || "";
-            row.cells[10].querySelector("input").value = kode;
-          }
-        }
-      }
-    }
+  else if (level === "KABUPATEN/KOTA") {
+    populate("KECAMATAN", [...new Set(wilayahData.filter(w => w["KABUPATEN/KOTA"] === kab).map(w => w.KECAMATAN))]);
+    populate("DESA/KELURAHAN", []);
+    populate("KODE POS", []);
   }
-
-  document.getElementById('pasteInput').value = '';
-  document.getElementById('pasteArea').style.display = 'none';
+  else if (level === "KECAMATAN") {
+    populate("DESA/KELURAHAN", [...new Set(wilayahData.filter(w => w.KECAMATAN === kec).map(w => w["DESA/KELURAHAN"]))]);
+    populate("KODE POS", []);
+  }
+  else if (level === "DESA/KELURAHAN") {
+    populate("KODE POS", [...new Set(wilayahData.filter(w => w["DESA/KELURAHAN"] === desa).map(w => w["KODE POS"]))]);
+  }
 }
 
-// ✅ Normalisasi teks (hilangkan kapitalisasi & spasi ekstra)
-function normalize(str) {
-  return str ? str.trim().toUpperCase() : "";
+// --- Kirim data ke Spreadsheet
+async function submitForm() {
+  const inputs = document.querySelectorAll("#inputRow input, #inputRow select");
+  const obj = {};
+  inputs.forEach(el => obj[el.id] = el.value);
+
+  document.getElementById("status").textContent = "⏳ Mengirim...";
+  const res = await fetch(SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify(obj),
+    headers: { "Content-Type": "application/json" }
+  });
+  document.getElementById("status").textContent = res.ok ? "✅ Data tersimpan!" : "❌ Gagal simpan";
 }
+
+initForm();
 </script>
+</body>
+</html>
